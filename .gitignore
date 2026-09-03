@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+**/target/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Build
+frontend/dist/
+backend/target/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Uploads
+uploads/
+
+# Docker
+pgdata/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Temp
+*.tmp
+*.bak

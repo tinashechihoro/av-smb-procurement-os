@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: av-smb-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-avsmc_procurement}
+      POSTGRES_USER: ${DB_USERNAME:-avsmc_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-avsmc_s3cur3_2026}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    command: postgres -c max_connections=200 -c shared_buffers=256MB -c effective_cache_size=768MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-avsmc_admin} -d ${DB_NAME:-avsmc_procurement}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - av-smb-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: av-smb-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-avsmc_procurement}
+      DB_USERNAME: ${DB_USERNAME:-avsmc_admin}
+      DB_PASSWORD: ${DB_PASSWORD:-avsmc_s3cur3_2026}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      JWT_SECRET: ${JWT_SECRET:-YXZzbWMtcHJvY3VyZW1lbnQtcGxhdGZvcm0tc2VjcmV0LWtleS0yMDI2LXByb2R1Y3Rpb24}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:80,http://localhost:5180}
+      SERVER_PORT: 4000
+      LOG_LEVEL_ROOT: ${LOG_LEVEL_ROOT:-INFO}
+      LOG_LEVEL_APP: ${LOG_LEVEL_APP:-INFO}
+      LOG_LEVEL_SQL: WARN
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - uploads:/app/uploads
+      - logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - av-smb-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: av-smb-frontend
+    ports:
+      - "${FRONTEND_PORT:-3080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - av-smb-net
+
+volumes:
+  pgdata:
+    driver: local
+  uploads:
+    driver: local
+  logs:
+    driver: local
+
+networks:
+  av-smb-net:
+    driver: bridge

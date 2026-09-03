@@ -1,0 +1,19 @@
+# Production profile overrides
+spring:
+  jpa:
+    properties:
+      hibernate:
+        generate_statistics: false
+  flyway:
+    validate-on-migrate: true
+
+app:
+  security:
+    max-login-attempts: 3
+    lockout-duration-minutes: 30
+
+logging:
+  level:
+    root: WARN
+    com.avsmc: INFO
+    org.hibernate.SQL: WARN

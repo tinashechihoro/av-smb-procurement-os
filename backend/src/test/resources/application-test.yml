@@ -1,0 +1,21 @@
+# Test profile
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/avsmc_procurement
+    username: avsmc_admin
+    password: avsmc_s3cur3_2026
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: false
+
+app:
+  jwt:
+    secret: test-secret-key-for-testing-only-minimum-32-bytes-long
+    expiration-ms: 3600000
+
+logging:
+  level:
+    root: WARN
+    com.avsmc: WARN
