@@ -44,14 +44,22 @@ jobs:
           path: backend/target/*.jar
 
   backend-security:
+    # Scan the built JAR rather than resolving POMs: Trivy's jar scanning uses
+    # its own Java DB and avoids Maven Central rate limits (429) on runner IPs.
+    needs: backend-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Download backend JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: backend-jar
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
-          scan-ref: 'backend/'
+          scan-ref: 'backend-jar/'
           severity: 'CRITICAL,HIGH'
 
   # ── Frontend ─────────────────────────────────────────────────────────────
