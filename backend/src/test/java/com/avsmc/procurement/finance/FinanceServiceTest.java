@@ -2,14 +2,21 @@ package com.avsmc.procurement.finance;
 
 import com.avsmc.procurement.finance.dto.*;
 import com.avsmc.procurement.finance.service.FinanceService;
+import com.avsmc.procurement.security.UserPrincipal;
 import com.avsmc.procurement.shared.exception.BusinessRuleException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,6 +26,23 @@ class FinanceServiceTest {
 
     @Autowired
     private FinanceService financeService;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        // Service-layer calls require an authenticated principal; act as the
+        // seeded AV Motors administrator.
+        UserPrincipal principal = new UserPrincipal(
+                UUID.fromString("a2000000-0000-0000-0000-000000000001"),
+                UUID.fromString("a0000000-0000-0000-0000-000000000001"),
+                "AV_SYS_ADMIN");
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                principal, null, List.of(new SimpleGrantedAuthority("ROLE_AV_SYS_ADMIN"))));
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void createManualJournal_balancedEntry_succeeds() {
