@@ -112,6 +112,7 @@ jobs:
           DB_PASSWORD=ci-smoke-test-password
           JWT_SECRET=ci-smoke-test-jwt-secret-at-least-32-bytes-long
           SEED_ADMIN_PASSWORD=CiSmoke@12345
+          CORS_ORIGINS=http://example.com
           EOF
           docker compose up -d
           timeout=120

@@ -37,7 +37,7 @@ services:
       DB_USERNAME: ${DB_USERNAME:-avsmc_admin}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env — see .env.example}
       DB_POOL_MAX: ${DB_POOL_MAX:-20}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env — generate with: openssl rand -base64 64}
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET in .env (generate with openssl rand -base64 64)}"
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@123}
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS in .env — production origins only}
       SERVER_PORT: 4000
