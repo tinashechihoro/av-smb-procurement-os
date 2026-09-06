@@ -104,9 +104,7 @@ jobs:
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - name: Build Docker images
-        run: docker compose build
-      - name: Smoke test
+      - name: Write smoke-test environment
         run: |
           cat > .env <<'EOF'
           DB_PASSWORD=ci-smoke-test-password
@@ -114,6 +112,10 @@ jobs:
           SEED_ADMIN_PASSWORD=CiSmoke@12345
           CORS_ORIGINS=http://example.com
           EOF
+      - name: Build Docker images
+        run: docker compose build
+      - name: Smoke test
+        run: |
           docker compose up -d
           timeout=120
           until curl -sf http://localhost:4000/api/actuator/health >/dev/null 2>&1; do
