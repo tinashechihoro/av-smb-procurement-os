@@ -7,7 +7,9 @@ import com.avsmc.procurement.security.JwtTokenProvider;
 import com.avsmc.procurement.security.SecurityUtils;
 import com.avsmc.procurement.shared.exception.BusinessRuleException;
 import com.avsmc.procurement.shared.exception.ResourceNotFoundException;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,22 +32,33 @@ public class IdentityService {
     private final JwtTokenProvider jwtTokenProvider;
     private final SecurityUtils securityUtils;
 
+    @Value("${app.security.max-login-attempts:5}")
+    private int maxLoginAttempts;
+
+    @Value("${app.security.lockout-duration-minutes:15}")
+    private long lockoutDurationMinutes;
+
+    @Value("${app.security.password-min-length:8}")
+    private int passwordMinLength;
+
     @Transactional
     public AuthResponse login(AuthRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
+        // Check lockout before burning a bcrypt comparison, so locked accounts
+        // cannot extend the lock window with further guesses.
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
+            throw new LockedException("Account is locked");
+        }
+
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             user.setFailedLoginAttempts(user.getFailedLoginAttempts() + 1);
-            if (user.getFailedLoginAttempts() >= 5) {
-                user.setLockedUntil(Instant.now().plusSeconds(900));
+            if (user.getFailedLoginAttempts() >= maxLoginAttempts) {
+                user.setLockedUntil(Instant.now().plusSeconds(lockoutDurationMinutes * 60));
             }
             userRepository.save(user);
             throw new BadCredentialsException("Invalid email or password");
-        }
-
-        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
-            throw new LockedException("Account is locked");
         }
 
         if (!user.getIsActive()) {
@@ -57,9 +70,96 @@ public class IdentityService {
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
 
+        return buildAuthResponse(user);
+    }
+
+    @Transactional
+    public AuthResponse refresh(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()
+                || !jwtTokenProvider.validateRefreshToken(refreshToken)) {
+            throw new BadCredentialsException("Invalid refresh token");
+        }
+
+        UUID userId;
+        try {
+            userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new BadCredentialsException("Invalid refresh token");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
+
+        if (!user.getIsActive()) {
+            throw new BadCredentialsException("Account is disabled");
+        }
+
+        return buildAuthResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public UserDto getCurrentUser() {
+        User user = userRepository.findByIdWithRoles(securityUtils.currentUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("User", securityUtils.currentUserId()));
+        return toUserDto(user);
+    }
+
+    @Transactional
+    public UserDto createUser(CreateUserRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessRuleException("Email already registered: " + request.getEmail());
+        }
+        if (request.getPassword() == null || request.getPassword().length() < passwordMinLength) {
+            throw new BusinessRuleException("Password must be at least " + passwordMinLength + " characters");
+        }
+
+        UUID orgId = securityUtils.currentOrgId();
+        organisationRepository.findById(orgId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organisation", orgId));
+
+        User user = User.builder()
+                .email(request.getEmail())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .phone(request.getPhone())
+                .build();
+
+        List<Role> roles = roleRepository.findAllById(request.getRoleIds());
+        if (roles.size() != request.getRoleIds().size()) {
+            throw new BusinessRuleException("One or more roles do not exist");
+        }
+        for (Role role : roles) {
+            if (!orgId.equals(role.getOrganisationId())) {
+                throw new BusinessRuleException("Role does not belong to your organisation: " + role.getCode());
+            }
+        }
+        user.setRoles(new java.util.HashSet<>(roles));
+
+        user.setOrganisationId(orgId);
+        user = userRepository.save(user);
+        return toUserDto(user);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserDto> listUsers() {
+        return userRepository.findByOrganisationId(securityUtils.currentOrgId())
+                .stream().map(this::toUserDto).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<RoleDto> listRoles() {
+        return roleRepository.findByOrganisationId(securityUtils.currentOrgId())
+                .stream().map(this::toRoleDto).collect(Collectors.toList());
+    }
+
+    private AuthResponse buildAuthResponse(User user) {
         Organisation org = organisationRepository.findById(user.getOrganisationId())
                 .orElseThrow(() -> new ResourceNotFoundException("Organisation", user.getOrganisationId()));
 
+        if (user.getRoles().isEmpty()) {
+            throw new BadCredentialsException("User has no assigned role");
+        }
         Role primaryRole = user.getRoles().iterator().next();
         List<String> permissions = primaryRole.getPermissions().stream()
                 .map(Permission::getCode)
@@ -81,46 +181,6 @@ public class IdentityService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .build();
-    }
-
-    @Transactional(readOnly = true)
-    public UserDto getCurrentUser() {
-        User user = userRepository.findByIdWithRoles(securityUtils.currentUserId())
-                .orElseThrow(() -> new ResourceNotFoundException("User", securityUtils.currentUserId()));
-        return toUserDto(user);
-    }
-
-    @Transactional
-    public UserDto createUser(CreateUserRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessRuleException("Email already registered: " + request.getEmail());
-        }
-
-        User user = User.builder()
-                .email(request.getEmail())
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .phone(request.getPhone())
-                .build();
-
-        List<Role> roles = roleRepository.findAllById(request.getRoleIds());
-        user.setRoles(new java.util.HashSet<>(roles));
-
-        user = userRepository.save(user);
-        return toUserDto(user);
-    }
-
-    @Transactional(readOnly = true)
-    public List<UserDto> listUsers() {
-        return userRepository.findByOrganisationId(securityUtils.currentOrgId())
-                .stream().map(this::toUserDto).collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public List<RoleDto> listRoles() {
-        return roleRepository.findByOrganisationId(securityUtils.currentOrgId())
-                .stream().map(this::toRoleDto).collect(Collectors.toList());
     }
 
     private UserDto toUserDto(User user) {

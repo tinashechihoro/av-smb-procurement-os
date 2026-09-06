@@ -27,7 +27,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String token = extractToken(request);
 
-        if (StringUtils.hasText(token) && tokenProvider.validateToken(token)) {
+        if (StringUtils.hasText(token) && tokenProvider.validateAccessToken(token)) {
             UUID userId = tokenProvider.getUserIdFromToken(token);
             UUID orgId = tokenProvider.getOrganisationIdFromToken(token);
             String role = tokenProvider.getRoleCodeFromToken(token);

@@ -21,7 +21,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/avsmc_procurement}
     username: ${DB_USERNAME:avsmc_admin}
-    password: ${DB_PASSWORD:avsmc_s3cur3_2026}
+    password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: ${DB_POOL_MAX:20}
@@ -49,6 +49,8 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     validate-on-migrate: true
+    placeholders:
+      seedAdminPassword: ${SEED_ADMIN_PASSWORD:Admin@123}
   jackson:
     serialization:
       write-dates-as-timestamps: false
@@ -67,7 +69,7 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:YXZzbWMtcHJvY3VyZW1lbnQtcGxhdGZvcm0tc2VjcmV0LWtleS0yMDI2LXByb2R1Y3Rpb24}
+    secret: ${JWT_SECRET:}
     expiration-ms: ${JWT_EXPIRATION_MS:3600000}
     refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:86400000}
   cors:

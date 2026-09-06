@@ -1,14 +1,17 @@
 # Test profile
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/avsmc_procurement
-    username: avsmc_admin
-    password: avsmc_s3cur3_2026
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/avsmc_procurement}
+    username: ${DB_USERNAME:avsmc_admin}
+    password: ${DB_PASSWORD:avsmc_s3cur3_2026}
   jpa:
     hibernate:
       ddl-auto: none
   flyway:
-    enabled: false
+    enabled: true
+    baseline-on-migrate: true
+    placeholders:
+      seedAdminPassword: Admin@123
 
 app:
   jwt:

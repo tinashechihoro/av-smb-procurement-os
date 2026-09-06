@@ -4,6 +4,7 @@ import com.avsmc.procurement.platform.entity.Notification;
 import com.avsmc.procurement.platform.repository.NotificationRepository;
 import com.avsmc.procurement.security.SecurityUtils;
 import jakarta.persistence.EntityManager;
+import com.avsmc.procurement.security.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ public class PlatformController {
 
     private final NotificationRepository notificationRepository;
     private final SecurityUtils securityUtils;
+    private final PermissionService permissionService;
     private final EntityManager entityManager;
 
     @GetMapping("/audit")
@@ -25,6 +27,8 @@ public class PlatformController {
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) UUID userId,
             @RequestParam(defaultValue = "50") int limit) {
+        permissionService.requirePermission("audit.view");
+
 
         StringBuilder sql = new StringBuilder(
                 "SELECT id, organisation_id, user_id, action, entity_type, entity_id, " +
@@ -79,10 +83,12 @@ public class PlatformController {
 
     @PostMapping("/notifications/{id}/read")
     public ResponseEntity<Void> markAsRead(@PathVariable UUID id) {
-        notificationRepository.findById(id).ifPresent(n -> {
-            n.setIsRead(true);
-            notificationRepository.save(n);
-        });
+        notificationRepository.findById(id)
+                .filter(n -> securityUtils.currentUserId().equals(n.getUserId()))
+                .ifPresent(n -> {
+                    n.setIsRead(true);
+                    notificationRepository.save(n);
+                });
         return ResponseEntity.ok().build();
     }
 }

@@ -88,6 +88,10 @@ public class FileUploadController {
         UploadedFile file = fileRepository.findById(id)
                 .orElseThrow(() -> new com.avsmc.procurement.shared.exception.ResourceNotFoundException("File", id));
 
+        if (!securityUtils.currentOrgId().equals(file.getOrganisationId())) {
+            throw new com.avsmc.procurement.shared.exception.ResourceNotFoundException("File", id);
+        }
+
         byte[] data = Files.readAllBytes(Paths.get(file.getStoragePath()));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.getOriginalName() + "\"")
@@ -97,7 +101,8 @@ public class FileUploadController {
 
     @GetMapping("/entity/{entityType}/{entityId}")
     public ResponseEntity<List<Map<String, Object>>> listByEntity(@PathVariable String entityType, @PathVariable UUID entityId) {
-        List<Map<String, Object>> files = fileRepository.findByEntityTypeAndEntityId(entityType, entityId)
+        List<Map<String, Object>> files = fileRepository
+                .findByEntityTypeAndEntityIdAndOrganisationId(entityType, entityId, securityUtils.currentOrgId())
                 .stream().map(f -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("id", f.getId());

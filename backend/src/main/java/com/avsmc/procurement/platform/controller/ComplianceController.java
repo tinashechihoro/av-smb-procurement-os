@@ -2,6 +2,7 @@ package com.avsmc.procurement.platform.controller;
 
 import com.avsmc.procurement.security.SecurityUtils;
 import jakarta.persistence.EntityManager;
+import com.avsmc.procurement.security.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ public class ComplianceController {
 
     private final EntityManager em;
     private final SecurityUtils securityUtils;
+    private final PermissionService permissionService;
 
     @Value("${app.audit.retention-days:2555}")
     private int auditRetentionDays;
@@ -46,6 +48,8 @@ public class ComplianceController {
 
     @GetMapping("/audit-retention")
     public ResponseEntity<Map<String, Object>> auditRetention() {
+        permissionService.requirePermission("audit.view");
+
         UUID orgId = securityUtils.currentOrgId();
 
         long totalEntries = ((Number) em.createNativeQuery(

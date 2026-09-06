@@ -2,6 +2,7 @@ package com.avsmc.procurement.platform.controller;
 
 import com.avsmc.procurement.security.SecurityUtils;
 import jakarta.persistence.EntityManager;
+import com.avsmc.procurement.security.PermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -19,9 +20,12 @@ public class ReportController {
 
     private final EntityManager em;
     private final SecurityUtils securityUtils;
+    private final PermissionService permissionService;
 
     @GetMapping("/trial-balance")
     public ResponseEntity<Map<String, Object>> trialBalance() {
+        permissionService.requirePermission("reports.view");
+
         UUID orgId = securityUtils.currentOrgId();
         List<Object[]> rows = em.createNativeQuery(
                 "SELECT account_code, account_name, account_type, normal_balance, current_balance FROM chart_of_accounts WHERE organisation_id = :orgId AND is_active = true ORDER BY account_code")
@@ -56,6 +60,8 @@ public class ReportController {
 
     @GetMapping("/debtor-ageing")
     public ResponseEntity<Map<String, Object>> debtorAgeing() {
+        permissionService.requirePermission("reports.view");
+
         UUID orgId = securityUtils.currentOrgId();
         List<Object[]> rows = em.createNativeQuery(
                 "SELECT i.invoice_number, i.to_entity, i.invoice_date, i.total_amount, i.amount_paid, " +
@@ -81,6 +87,8 @@ public class ReportController {
 
     @GetMapping("/job-cost")
     public ResponseEntity<Map<String, Object>> jobCostReport() {
+        permissionService.requirePermission("reports.view");
+
         UUID orgId = securityUtils.currentOrgId();
         List<Object[]> rows = em.createNativeQuery(
                 "SELECT j.job_number, j.title, j.status, j.priority, j.estimated_total, j.actual_total, " +
@@ -109,6 +117,8 @@ public class ReportController {
 
     @GetMapping("/inventory-valuation")
     public ResponseEntity<Map<String, Object>> inventoryValuation() {
+        permissionService.requirePermission("reports.view");
+
         UUID orgId = securityUtils.currentOrgId();
         List<Object[]> rows = em.createNativeQuery(
                 "SELECT part_number, description, quantity_on_hand, quantity_reserved, " +
@@ -142,6 +152,8 @@ public class ReportController {
 
     @GetMapping("/procurement-pipeline")
     public ResponseEntity<Map<String, Object>> procurementPipeline() {
+        permissionService.requirePermission("reports.view");
+
         UUID orgId = securityUtils.currentOrgId();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reportTitle", "Procurement Pipeline");
@@ -157,6 +169,8 @@ public class ReportController {
 
     @GetMapping("/csv/{reportType}")
     public ResponseEntity<byte[]> exportCsv(@PathVariable String reportType) {
+        permissionService.requirePermission("reports.view");
+
         UUID orgId = securityUtils.currentOrgId();
         StringBuilder csv = new StringBuilder();
 

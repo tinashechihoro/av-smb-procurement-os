@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface UploadedFileRepository extends JpaRepository<UploadedFile, UUID> {
     List<UploadedFile> findByEntityTypeAndEntityId(String entityType, UUID entityId);
     List<UploadedFile> findByOrganisationId(UUID organisationId);
+    List<UploadedFile> findByEntityTypeAndEntityIdAndOrganisationId(String entityType, UUID entityId, UUID organisationId);
 }

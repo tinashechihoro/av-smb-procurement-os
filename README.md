@@ -7,7 +7,7 @@ Full-stack enterprise procurement and spare parts management platform for a pane
 | Layer | Technology |
 |-------|-----------|
 | **Frontend** | React 18 + TypeScript + Vite |
-| **Backend** | Spring Boot 3.3 + Java 17 |
+| **Backend** | Spring Boot 3.3 + Java 21 |
 | **Database** | PostgreSQL 16 |
 | **Auth** | JWT (stateless) |
 | **ORM** | Spring Data JPA / Hibernate 6 |
@@ -100,11 +100,14 @@ av-smb-platform/
 ## Security Model
 
 - **Deny-by-default RBAC** — AV users cannot see SMB supplier costs, creditor balances, banking or margins
-- **Organisation-scoped data** — every query filtered by authenticated user's organisation
+- **Permission-enforced endpoints** — every module endpoint validates the caller's role against the permission matrix (`PermissionService`); unauthenticated or unauthorised calls get 401/403
+- **Organisation-scoped data** — every query filtered by authenticated user's organisation, including file downloads
 - **Immutable audit log** — append-only via PostgreSQL triggers
-- **JWT auth** — stateless tokens with refresh strategy
-- **Account lockout** — 5 failed attempts → 15-minute lock
+- **JWT auth** — stateless access tokens (1 h) + refresh tokens (24 h); refresh tokens are rejected as access tokens
+- **Account lockout** — configurable failed attempts (default 5, prod 3) → configurable lock (default 15 min, prod 30 min)
+- **Login rate limiting** — per-client-IP throttling on `/auth/login`
 - **Password hashing** — bcrypt (cost 12) via pgcrypto
+- **Upload hardening** — MIME-type allowlist, 25 MB cap, filename sanitisation, per-organisation storage isolation
 
 ## Quick Start
 
@@ -130,11 +133,50 @@ npm run dev
 - **AV Admin**: `admin@avmotors.com` / `Admin@123`
 - **SMB Admin**: `admin@smbprocurement.com` / `Admin@123`
 
+> Development only. The `prod` profile refuses to start while these defaults are in place — see *Production Deployment* below.
+
+## Production Deployment
+
+### 1. Configure the environment
+```bash
+cp .env.example .env
+```
+Then set **at minimum** (the stack will not start without them):
+
+| Variable | Notes |
+|----------|-------|
+| `DB_PASSWORD` | Strong, unique. The dev default is rejected in prod. |
+| `JWT_SECRET` | `openssl rand -base64 64`. Min 32 bytes; dev default rejected in prod. |
+| `CORS_ORIGINS` | Your production origins only — `localhost` entries are rejected in prod. |
+| `SEED_ADMIN_PASSWORD` | Initial password for the seeded admin accounts (applied by Flyway migration V2). Avoid single quotes. |
+
+The backend runs with the `prod` profile by default in Docker, which additionally:
+- disables Swagger/OpenAPI endpoints
+- hides actuator health details and stack traces
+- tightens lockout (3 attempts / 30 min)
+- honours `X-Forwarded-*` headers from the reverse proxy
+- validates on startup (`ProductionConfigGuard`) that secrets are set and non-default
+
+### 2. Build and start
+```bash
+docker compose up -d --build
+```
+The backend image is a self-contained multi-stage build — no local Maven/JDK required. PostgreSQL is published on `127.0.0.1` only; expose/tunnel it explicitly if remote access is needed.
+
+### 3. After first boot
+- Rotate the seeded admin passwords (or set `SEED_ADMIN_PASSWORD` before the first migration run) and create real user accounts.
+- Terminate TLS at your edge/reverse proxy in front of the frontend container (HSTS headers are already emitted).
+- Scrape `/api/actuator/prometheus` (authenticated) for metrics; `/api/actuator/health` is public for liveness probes.
+
+### CI/CD
+GitHub Actions (`.github/workflows/ci.yml`) runs on `master`: backend tests (against a Postgres service), frontend lint/build/tests, Trivy vulnerability scan, Docker image build and a containerised smoke test, then a gated `production` environment deploy step to configure with your target.
+
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/auth/login` | Authenticate |
+| POST | `/api/auth/refresh` | Exchange refresh token for new tokens |
 | GET | `/api/auth/me` | Current user profile |
 | GET/POST | `/api/vehicles` | Vehicle CRUD |
 | GET/POST | `/api/repair-jobs` | Repair job CRUD |

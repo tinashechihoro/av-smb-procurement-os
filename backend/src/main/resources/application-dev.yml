@@ -1,0 +1,22 @@
+# Development profile — local convenience defaults only.
+# None of these values are suitable for production; the prod profile
+# fails startup if secrets are missing or left at development defaults.
+spring:
+  datasource:
+    password: ${DB_PASSWORD:avsmc_s3cur3_2026}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-jwt-secret-avsmc-platform-min-32-bytes}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5180,http://localhost:5173}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    com.avsmc: DEBUG

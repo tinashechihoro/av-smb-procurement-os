@@ -1,4 +1,14 @@
 # Production profile overrides
+server:
+  # Honour X-Forwarded-* headers from the reverse proxy (nginx) so redirects,
+  # URLs and client-IP derived logic are correct behind the proxy.
+  forward-headers-strategy: framework
+  error:
+    # Never leak stack traces / internal messages to clients
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
 spring:
   jpa:
     properties:
@@ -6,11 +16,24 @@ spring:
         generate_statistics: false
   flyway:
     validate-on-migrate: true
+    clean-disabled: true
+
+# Disable public API documentation in production
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
 
 app:
   security:
     max-login-attempts: 3
     lockout-duration-minutes: 30
+
+management:
+  endpoint:
+    health:
+      show-details: never
 
 logging:
   level:
