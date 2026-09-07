@@ -1,0 +1,47 @@
+# =============================================================================
+# Production override — app host behind the shared Traefik edge.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     --env-file .env.production up -d --build --remove-orphans
+#
+# Only the `frontend` container is published on the host (FRONTEND_PORT,
+# default 8181); ufw restricts that port to the Traefik host. The frontend
+# nginx already proxies /api to the backend, so Postgres and Spring Boot stay
+# on the internal compose network with no host exposure at all.
+#
+# Memory limits keep the stack a good tenant on a shared server; the backend
+# JVM sizes its heap from the container limit (-XX:MaxRAMPercentage=75).
+# =============================================================================
+
+services:
+  postgres:
+    # Not even loopback: nothing outside the compose network needs the DB.
+    ports: !override []
+    mem_limit: 1g
+
+  backend:
+    ports: !override []
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-avsmc_procurement}
+      DB_USERNAME: ${DB_USERNAME:-avsmc_admin}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
+      SERVER_PORT: 4000
+      LOG_LEVEL_ROOT: ${LOG_LEVEL_ROOT:-WARN}
+      LOG_LEVEL_APP: ${LOG_LEVEL_APP:-INFO}
+      LOG_LEVEL_SQL: WARN
+    mem_limit: 1536m
+
+  # Edge container: SPA + /api proxy, the only service published on the host.
+  # Traefik on 79.143.188.3 forwards proc.coresign.africa here over plain HTTP.
+  frontend:
+    ports: !override
+      - "${FRONTEND_PORT:-8181}:80"
+    depends_on: !override
+      backend:
+        condition: service_healthy
+    mem_limit: 128m

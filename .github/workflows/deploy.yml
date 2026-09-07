@@ -1,0 +1,136 @@
+# =============================================================================
+# AV Motors x SMB Procurement OS — production CD.
+#
+# Runs automatically after the CI/CD Pipeline workflow passes on main/master.
+# No approval gate and no manual step: a green push to the default branch is
+# deployed.
+#
+# Topology:
+#   Traefik (79.143.188.3)  --HTTP--> app host 173.249.38.38:8181
+#   app host: /opt/av-smb-procurement, docker compose
+#             (frontend nginx: SPA + /api proxy -> Spring Boot -> Postgres)
+#
+# Required repository secrets:
+#   DEPLOY_SSH_KEY          private key authorised for root on both hosts
+#   DEPLOY_HOST             app host  (173.249.38.38)
+#   TRAEFIK_HOST            edge host (79.143.188.3)
+#   PROD_DB_PASSWORD
+#   PROD_JWT_SECRET         openssl rand -base64 64
+#   PROD_SEED_ADMIN_PASSWORD
+# =============================================================================
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    env:
+      APP_DIR: /opt/av-smb-procurement
+      DOMAIN: proc.coresign.africa
+      EDGE_PORT: "8181"
+      PROJECT: av-smb-prod
+
+    steps:
+      - name: Checkout the commit CI validated
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Sync repo to app host
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new root@${{ secrets.DEPLOY_HOST }} "mkdir -p ${APP_DIR}"
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'docs/' \
+            --exclude 'frontend/node_modules/' \
+            --exclude 'frontend/dist/' \
+            --exclude 'backend/target/' \
+            --exclude '.env.production' \
+            ./ root@${{ secrets.DEPLOY_HOST }}:${APP_DIR}/
+
+      - name: Write production env
+        run: |
+          umask 077
+          cat > .env.production <<EOF
+          SPRING_PROFILES_ACTIVE=prod
+          DB_NAME=avsmc_procurement
+          DB_USERNAME=avsmc_admin
+          DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
+          DB_POOL_MAX=20
+          JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
+          SEED_ADMIN_PASSWORD=${{ secrets.PROD_SEED_ADMIN_PASSWORD }}
+          CORS_ORIGINS=https://${DOMAIN}
+          FRONTEND_PORT=${EDGE_PORT}
+          LOG_LEVEL_ROOT=WARN
+          LOG_LEVEL_APP=INFO
+          EMAIL_FROM=noreply@${DOMAIN}
+          EOF
+
+      - name: Copy env to app host
+        run: |
+          scp -o StrictHostKeyChecking=accept-new .env.production \
+            root@${{ secrets.DEPLOY_HOST }}:${APP_DIR}/.env.production
+          ssh -o StrictHostKeyChecking=accept-new root@${{ secrets.DEPLOY_HOST }} \
+            "chmod 600 ${APP_DIR}/.env.production"
+
+      - name: Open the edge port to Traefik only
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new root@${{ secrets.DEPLOY_HOST }} \
+            "ufw allow from ${{ secrets.TRAEFIK_HOST }} to any port ${EDGE_PORT} proto tcp comment 'Traefik -> av-smb-procurement' || true"
+
+      - name: Build and start the stack
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new root@${{ secrets.DEPLOY_HOST }} "
+            set -e
+            cd ${APP_DIR}
+            docker compose -p ${PROJECT} \
+              -f docker-compose.yml -f docker-compose.prod.yml \
+              --env-file .env.production \
+              up -d --build --remove-orphans
+            docker image prune -f
+          "
+
+      - name: Install Traefik route
+        run: |
+          scp -o StrictHostKeyChecking=accept-new deploy/traefik/${DOMAIN}.yml \
+            root@${{ secrets.TRAEFIK_HOST }}:/opt/traefik/data/dynamic_conf/${DOMAIN}.yml
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 36); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/api/actuator/health" || true)
+            if [ "$status" = "200" ]; then
+              echo "Backend healthy after ${i} attempt(s)."
+              curl -sf "https://${DOMAIN}/" -o /dev/null && echo "SPA served."
+              exit 0
+            fi
+            echo "Attempt ${i}: got ${status:-no response}; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::${DOMAIN} did not become healthy within 360s"
+          ssh -o StrictHostKeyChecking=accept-new root@${{ secrets.DEPLOY_HOST }} \
+            "cd ${APP_DIR} && docker compose -p ${PROJECT} -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production ps && docker compose -p ${PROJECT} -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production logs --tail 120 backend frontend" || true
+          exit 1

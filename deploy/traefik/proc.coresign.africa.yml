@@ -1,0 +1,25 @@
+# Traefik dynamic route for proc.coresign.africa.
+#
+# Installed by .github/workflows/deploy.yml into
+# /opt/traefik/data/dynamic_conf/ on the Traefik host (79.143.188.3).
+# The file provider runs with --providers.file.watch=true, so Traefik picks
+# the file up on write — no restart, and no interruption to the other sites
+# sharing this proxy.
+#
+# 8181 is the published port of the av-smb `frontend` container on the app
+# host; ufw only accepts it from the Traefik host.
+http:
+  routers:
+    av-smb-procurement:
+      rule: "Host(`proc.coresign.africa`)"
+      entrypoints:
+        - websecure
+      tls:
+        certresolver: letsencrypt
+      service: av-smb-procurement
+
+  services:
+    av-smb-procurement:
+      loadBalancer:
+        servers:
+          - url: "http://173.249.38.38:8181"
