@@ -21,7 +21,11 @@ RUN adduser -D -g '' appuser && chown -R appuser:appuser /usr/share/nginx/html /
 
 EXPOSE 80
 
+# 127.0.0.1, not localhost: nginx `listen 80` binds IPv4 only, while
+# localhost resolves to ::1 first inside the container, so the probe got
+# "connection refused" and the container was reported unhealthy while
+# serving traffic normally.
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost:80/ || exit 1
+  CMD wget -qO- http://127.0.0.1:80/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
