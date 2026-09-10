@@ -55,7 +55,10 @@ public class FileUploadController {
         String checksum = computeChecksum(file.getBytes());
         String storedName = UUID.randomUUID() + "_" + sanitizeFilename(file.getOriginalFilename());
         String datePath = LocalDate.now().toString().replace('-', '/');
-        Path dir = Paths.get(storagePath, securityUtils.currentOrgId().toString(), datePath);
+        // Absolute path: MultipartFile.transferTo resolves relative paths
+        // against the servlet temp directory, not the working directory.
+        Path dir = Paths.get(storagePath, securityUtils.currentOrgId().toString(), datePath)
+                .toAbsolutePath().normalize();
         Files.createDirectories(dir);
         Path target = dir.resolve(storedName);
         file.transferTo(target.toFile());

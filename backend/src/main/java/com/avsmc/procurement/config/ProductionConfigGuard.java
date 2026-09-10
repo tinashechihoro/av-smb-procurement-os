@@ -56,8 +56,15 @@ public class ProductionConfigGuard {
             failures.add("DB_PASSWORD is set to the development default. Set a production-specific password.");
         }
 
-        if (corsOrigins == null || corsOrigins.isBlank() || corsOrigins.contains("localhost")) {
-            failures.add("CORS_ORIGINS must list only production origins (no localhost).");
+        if (corsOrigins == null || corsOrigins.isBlank()) {
+            failures.add("CORS_ORIGINS is not set.");
+        } else if (corsOrigins.contains("localhost")) {
+            // Browsers send Origin on every POST, including same-origin requests
+            // served through a reverse proxy, so a deliberate local/TLS-less
+            // deployment must list its own serving origin. Warn, don't block.
+            log.warn("CORS_ORIGINS contains localhost origins ({}). This is only appropriate "
+                    + "for local or internal deployments — set your public origins for "
+                    + "internet-facing production.", corsOrigins);
         }
 
         if (!failures.isEmpty()) {

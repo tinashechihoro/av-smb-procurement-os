@@ -163,6 +163,19 @@ docker compose up -d --build
 ```
 The backend image is a self-contained multi-stage build — no local Maven/JDK required. PostgreSQL is published on `127.0.0.1` only; expose/tunnel it explicitly if remote access is needed.
 
+### Podman deployment
+Podman works without any compose provider:
+```bash
+cp .env.example .env   # then fill DB_PASSWORD / JWT_SECRET / SEED_ADMIN_PASSWORD / CORS_ORIGINS
+scripts/podman-deploy.sh up        # build images + start postgres, backend, frontend
+scripts/podman-deploy.sh down      # stop (data volumes kept)
+scripts/podman-deploy.sh destroy   # stop and wipe data volumes
+```
+Notes:
+- `CORS_ORIGINS` must include the origin the frontend is served from (e.g. `http://localhost:3080`) — browsers send `Origin` on every POST, even same-origin through the proxy.
+- On Windows/WSL the podman machine occasionally boots without `/etc/resolv.conf`; the deploy script repairs DNS automatically.
+- The stack runs the real `prod` profile (startup fails on default secrets).
+
 ### 3. After first boot
 - Rotate the seeded admin passwords (or set `SEED_ADMIN_PASSWORD` before the first migration run) and create real user accounts.
 - Terminate TLS at your edge/reverse proxy in front of the frontend container (HSTS headers are already emitted).
@@ -170,6 +183,19 @@ The backend image is a self-contained multi-stage build — no local Maven/JDK r
 
 ### CI/CD
 GitHub Actions (`.github/workflows/ci.yml`) runs on `master`: backend tests (against a Postgres service), frontend lint/build/tests, Trivy vulnerability scan, Docker image build and a containerised smoke test, then a gated `production` environment deploy step to configure with your target.
+
+## Testing
+
+```bash
+# Full API use-case suite against a running deployment (all modules,
+# RBAC negatives, cross-tenant isolation, lockout, refresh flow, files):
+BASE_URL=http://localhost:3080 ADMIN_PASSWORD='<seeded admin password>' \
+  scripts/api-usecase-tests.sh
+
+# Browser e2e (Playwright) against a running deployment:
+cd frontend && E2E_BASE_URL=http://localhost:3080 E2E_ADMIN_PASSWORD='<password>' \
+  npx playwright test --project=chromium
+```
 
 ## API Endpoints
 

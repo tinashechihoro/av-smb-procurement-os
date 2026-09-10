@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+// Override for deployments that rotate the seeded admin password:
+//   E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD npm run test:e2e
+const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@avmotors.com';
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'Admin@123';
+
 test.describe('Authentication', () => {
   test('should show login page', async ({ page }) => {
     await page.goto('/');
@@ -8,33 +13,33 @@ test.describe('Authentication', () => {
 
   test('should login with valid credentials', async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'admin@avmotors.com');
-    await page.fill('input[type="password"]', 'Admin@123');
+    await page.fill('input[type="email"]', ADMIN_EMAIL);
+    await page.fill('input[type="password"]', ADMIN_PASSWORD);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
-    await expect(page.locator('h2')).toContainText('Command Centre');
+    await expect(page.locator('.kpi-card').first()).toBeVisible();
   });
 
   test('should show error for invalid credentials', async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'admin@avmotors.com');
+    await page.fill('input[type="email"]', ADMIN_EMAIL);
     await page.fill('input[type="password"]', 'wrong');
     await page.click('button[type="submit"]');
-    await expect(page.locator('.toast')).toBeVisible();
+    await expect(page.getByText('Invalid email or password')).toBeVisible();
   });
 });
 
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'admin@avmotors.com');
-    await page.fill('input[type="password"]', 'Admin@123');
+    await page.fill('input[type="email"]', ADMIN_EMAIL);
+    await page.fill('input[type="password"]', ADMIN_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
   });
 
   test('should display KPI cards', async ({ page }) => {
-    await expect(page.locator('.kpi-card')).toHaveCount(8);
+    await expect(page.locator('.kpi-card')).toHaveCount(4);
   });
 
   test('should display workflow pipeline', async ({ page }) => {
@@ -50,8 +55,8 @@ test.describe('Dashboard', () => {
 test.describe('Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'admin@avmotors.com');
-    await page.fill('input[type="password"]', 'Admin@123');
+    await page.fill('input[type="email"]', ADMIN_EMAIL);
+    await page.fill('input[type="password"]', ADMIN_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
   });

@@ -17,11 +17,12 @@ import java.util.UUID;
 @EntityListeners(AuditingEntityListener.class)
 public abstract class BaseEntity {
 
+    // Assigned at construction so parent and child entities can reference each
+    // other's id before persist (children capture the parent id when they are
+    // built, which happens before the parent's INSERT).
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
     @Column(updatable = false, nullable = false)
-    private UUID id;
+    private UUID id = UUID.randomUUID();
 
     @CreatedDate
     @Column(updatable = false)

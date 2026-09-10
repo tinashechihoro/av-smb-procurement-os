@@ -31,6 +31,7 @@ public class IdentityService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final SecurityUtils securityUtils;
+    private final LoginFailureRecorder loginFailureRecorder;
 
     @Value("${app.security.max-login-attempts:5}")
     private int maxLoginAttempts;
@@ -53,11 +54,10 @@ public class IdentityService {
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            user.setFailedLoginAttempts(user.getFailedLoginAttempts() + 1);
-            if (user.getFailedLoginAttempts() >= maxLoginAttempts) {
-                user.setLockedUntil(Instant.now().plusSeconds(lockoutDurationMinutes * 60));
-            }
-            userRepository.save(user);
+            // Recorded in a REQUIRES_NEW transaction: the BadCredentialsException
+            // below rolls back the caller's transaction, but the attempt counter
+            // and lockout must persist.
+            loginFailureRecorder.registerFailure(user, maxLoginAttempts, lockoutDurationMinutes);
             throw new BadCredentialsException("Invalid email or password");
         }
 

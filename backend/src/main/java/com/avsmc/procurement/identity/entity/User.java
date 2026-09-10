@@ -40,12 +40,15 @@ public class User extends BaseEntity {
     private String avatarUrl;
 
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private Boolean isActive = true;
 
     @Column(name = "mfa_enabled", nullable = false)
+    @Builder.Default
     private Boolean mfaEnabled = false;
 
     @Column(name = "failed_login_attempts", nullable = false)
+    @Builder.Default
     private Integer failedLoginAttempts = 0;
 
     @Column(name = "locked_until")
