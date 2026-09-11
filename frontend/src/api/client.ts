@@ -1,4 +1,5 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import toast from 'react-hot-toast';
 
 const api = axios.create({
   baseURL: '/api',
@@ -14,6 +15,17 @@ api.interceptors.request.use((config) => {
 });
 
 let refreshPromise: Promise<string | null> | null = null;
+
+// RBAC denials land here because list pages swallow load errors; one toast per
+// burst keeps a dashboard of concurrent 403s from spamming the user.
+let lastForbiddenToastAt = 0;
+function notifyForbidden() {
+  const now = Date.now();
+  if (now - lastForbiddenToastAt > 4000) {
+    lastForbiddenToastAt = now;
+    toast.error('You do not have permission to view this data (SMB confidential)');
+  }
+}
 
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = localStorage.getItem('refreshToken');
@@ -62,6 +74,8 @@ api.interceptors.response.use(
       forceLogout();
     } else if (status === 401 && isAuthEndpoint) {
       forceLogout();
+    } else if (status === 403 && !isAuthEndpoint) {
+      notifyForbidden();
     }
 
     return Promise.reject(error);
