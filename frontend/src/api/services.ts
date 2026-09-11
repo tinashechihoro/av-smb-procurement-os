@@ -2,14 +2,28 @@ import api from './client';
 import type {
   AuthResponse, Vehicle, RepairJob, Requisition, Quotation, Order,
   Supplier, InventoryItem, Invoice, Payment, CashbookEntry, Journal,
-  ChartOfAccount, AuditEntry, Notification
+  ChartOfAccount, AuditEntry, Notification, User, Role
 } from '../types';
 
 // Auth
 export const authApi = {
   login: (email: string, password: string) =>
-    api.post<AuthResponse>('/auth/login', { email, password }),
+    api.post<{ requiresOtp: boolean; otpId?: string; userId?: string; email?: string; fullName?: string; message?: string }>('/auth/login', { email, password }),
+  verifyLogin: (userId: string, otpCode: string) =>
+    api.post<{ success: boolean; accessToken?: string; refreshToken?: string; user?: AuthResponse; error?: string }>('/auth/login/verify', { userId, otpCode }),
   me: () => api.get('/auth/me'),
+  listUsers: () => api.get<User[]>('/auth/users'),
+  createUser: (data: any) => api.post<User>('/auth/users', data),
+  updateUser: (id: string, data: any) => api.put<User>(`/auth/users/${id}`, data),
+  deactivateUser: (id: string) => api.delete(`/auth/users/${id}`),
+  listRoles: () => api.get<Role[]>('/auth/roles'),
+};
+
+// OTP
+export const otpApi = {
+  generate: (purpose: string) => api.post<{ success: boolean; otpId: string; expiresAt: string; message: string }>('/otp/generate', { purpose }),
+  verify: (otpId: string, code: string) => api.post<{ success: boolean; otpId: string; userId: string; purpose: string; message: string }>('/otp/verify', { otpId, code }),
+  verifyForAction: (purpose: string, code: string) => api.post<{ success: boolean; otpId: string; verified: boolean; message: string }>('/otp/verify-for-action', { purpose, code }),
 };
 
 // Dashboard

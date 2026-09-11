@@ -18,9 +18,14 @@ export interface User {
   firstName: string;
   lastName: string;
   fullName: string;
+  phone?: string;
   organisationId: string;
   organisationName?: string;
   roles: Role[];
+  isActive?: boolean;
+  mfaEnabled?: boolean;
+  lastLoginAt?: string;
+  createdAt?: string;
 }
 
 export interface Role {

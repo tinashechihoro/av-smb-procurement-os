@@ -10,4 +10,8 @@ public class AuthRequest {
     private String email;
     @NotBlank
     private String password;
+
+    public void setPassword(String password) {
+        this.password = password != null ? password.trim() : null;
+    }
 }

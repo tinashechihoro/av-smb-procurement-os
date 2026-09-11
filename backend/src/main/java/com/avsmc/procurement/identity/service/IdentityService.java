@@ -1,6 +1,7 @@
 package com.avsmc.procurement.identity.service;
 
 import com.avsmc.procurement.identity.dto.*;
+import com.avsmc.procurement.identity.dto.UpdateUserRequest;
 import com.avsmc.procurement.identity.entity.*;
 import com.avsmc.procurement.identity.repository.*;
 import com.avsmc.procurement.security.JwtTokenProvider;
@@ -151,6 +152,68 @@ public class IdentityService {
     public List<RoleDto> listRoles() {
         return roleRepository.findByOrganisationId(securityUtils.currentOrgId())
                 .stream().map(this::toRoleDto).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public AuthResponse loginWithOtp(UUID userId, UUID otpId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
+
+        if (!user.getIsActive()) {
+            throw new BadCredentialsException("Account is disabled");
+        }
+
+        user.setFailedLoginAttempts(0);
+        user.setLockedUntil(null);
+        user.setLastLoginAt(Instant.now());
+        userRepository.save(user);
+
+        return buildAuthResponse(user);
+    }
+
+    @Transactional
+    public UserDto updateUser(UUID id, UpdateUserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id));
+
+        if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new BusinessRuleException("Email already registered: " + request.getEmail());
+            }
+            user.setEmail(request.getEmail());
+        }
+
+        if (request.getFirstName() != null) user.setFirstName(request.getFirstName());
+        if (request.getLastName() != null) user.setLastName(request.getLastName());
+        if (request.getPhone() != null) user.setPhone(request.getPhone());
+        if (request.getAvatarUrl() != null) user.setAvatarUrl(request.getAvatarUrl());
+        if (request.getIsActive() != null) user.setIsActive(request.getIsActive());
+        if (request.getMfaEnabled() != null) user.setMfaEnabled(request.getMfaEnabled());
+
+        if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
+            List<Role> roles = roleRepository.findAllById(request.getRoleIds());
+            if (roles.size() != request.getRoleIds().size()) {
+                throw new BusinessRuleException("One or more roles do not exist");
+            }
+            UUID orgId = user.getOrganisationId();
+            for (Role role : roles) {
+                if (!orgId.equals(role.getOrganisationId())) {
+                    throw new BusinessRuleException("Role does not belong to user's organisation: " + role.getCode());
+                }
+            }
+            user.setRoles(new java.util.HashSet<>(roles));
+        }
+
+        user = userRepository.save(user);
+        return toUserDto(user);
+    }
+
+    @Transactional
+    public void deactivateUser(UUID id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id));
+        user.setIsActive(false);
+        userRepository.save(user);
     }
 
     private AuthResponse buildAuthResponse(User user) {

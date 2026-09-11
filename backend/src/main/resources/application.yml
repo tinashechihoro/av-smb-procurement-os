@@ -90,6 +90,17 @@ app:
     enabled: true
     email-from: ${EMAIL_FROM:noreply@avsmc-platform.com}
 
+sms:
+  sendai:
+    api-key: ${SENDAI_API_KEY:}
+    base-url: ${SENDAI_BASE_URL:https://app.sendai.co.zw}
+
+otp:
+  expiry-minutes: ${OTP_EXPIRY_MINUTES:5}
+  max-attempts: ${OTP_MAX_ATTEMPTS:3}
+  test-mode: ${OTP_TEST_MODE:true}
+  test-code: ${OTP_TEST_CODE:123456}
+
 springdoc:
   api-docs:
     path: /api-docs

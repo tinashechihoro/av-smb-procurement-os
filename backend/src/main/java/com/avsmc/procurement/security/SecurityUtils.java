@@ -1,8 +1,11 @@
 package com.avsmc.procurement.security;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.UUID;
 
@@ -55,5 +58,25 @@ public class SecurityUtils {
 
     public boolean isSmbManager() {
         return hasRole("SMB_MANAGER") || isSmbAdmin();
+    }
+
+    public HttpServletRequest getCurrentRequest() {
+        ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        return attrs != null ? attrs.getRequest() : null;
+    }
+
+    public String getClientIp() {
+        HttpServletRequest request = getCurrentRequest();
+        if (request == null) return null;
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    public String getUserAgent() {
+        HttpServletRequest request = getCurrentRequest();
+        return request != null ? request.getHeader("User-Agent") : null;
     }
 }

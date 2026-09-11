@@ -17,7 +17,7 @@ describe('API Services', () => {
   });
 
   it('should call login endpoint', async () => {
-    const mockResponse = { data: { accessToken: 'token', fullName: 'Test' } };
+    const mockResponse = { data: { requiresOtp: true, userId: '123', email: 'test@test.com', fullName: 'Test' } };
     vi.mocked(api.post).mockResolvedValue(mockResponse);
 
     const { authApi } = await import('../api/services');
@@ -27,7 +27,7 @@ describe('API Services', () => {
       email: 'test@test.com',
       password: 'password',
     });
-    expect(result.data.accessToken).toBe('token');
+    expect(result.data.requiresOtp).toBe(true);
   });
 
   it('should call dashboard stats endpoint', async () => {

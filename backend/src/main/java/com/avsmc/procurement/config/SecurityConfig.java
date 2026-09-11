@@ -53,7 +53,7 @@ public class SecurityConfig {
                         writeError(response, HttpStatus.FORBIDDEN, "You do not have permission to perform this action"))
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/login", "/auth/refresh").permitAll()
+                .requestMatchers("/auth/login", "/auth/login/verify", "/auth/refresh", "/otp/verify").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
