@@ -23,13 +23,24 @@ export default function Login() {
     setLoading(true);
     try {
       const { data } = await authApi.login(email, password.trim());
-      if (data.requiresOtp && data.userId) {
-        setPendingUserId(data.userId);
-        setPendingFullName(data.fullName || null);
+      // Accounts without MFA are authenticated outright and get their tokens here.
+      if (!data.requiresOtp && data.user?.accessToken) {
+        setAuth(data.user);
+        toast.success(`Welcome, ${data.user.fullName}`);
+        navigate('/');
+        return;
+      }
+      // The server nests the identity under `user`; it used to be read only
+      // from the top level, so this branch never matched and every login fell
+      // through to "Unexpected login response".
+      const userId = data.userId || data.user?.userId;
+      if (data.requiresOtp && userId) {
+        setPendingUserId(userId);
+        setPendingFullName(data.fullName || data.user?.fullName || null);
         setStep('otp');
         toast.success(data.message || 'OTP sent to your registered phone');
       } else {
-        toast.error('Unexpected login response');
+        toast.error(data.error || 'Unexpected login response');
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Login failed');

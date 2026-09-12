@@ -7,8 +7,20 @@ import type {
 
 // Auth
 export const authApi = {
+  // requiresOtp=false carries a full AuthResponse (tokens included) for accounts
+  // without MFA; requiresOtp=true carries the challenge instead.
   login: (email: string, password: string) =>
-    api.post<{ requiresOtp: boolean; otpId?: string; userId?: string; email?: string; fullName?: string; message?: string }>('/auth/login', { email, password }),
+    api.post<{
+      success?: boolean;
+      requiresOtp: boolean;
+      otpId?: string;
+      userId?: string;
+      email?: string;
+      fullName?: string;
+      message?: string;
+      error?: string;
+      user?: AuthResponse;
+    }>('/auth/login', { email, password }),
   verifyLogin: (userId: string, otpCode: string) =>
     api.post<{ success: boolean; accessToken?: string; refreshToken?: string; user?: AuthResponse; error?: string }>('/auth/login/verify', { userId, otpCode }),
   me: () => api.get('/auth/me'),

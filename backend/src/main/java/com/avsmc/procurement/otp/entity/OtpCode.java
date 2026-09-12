@@ -52,7 +52,10 @@ public class OtpCode {
     @Column(name = "sms_status")
     private String smsStatus;
 
-    @Column(name = "ip_address", columnDefinition = "inet")
+    // Plain varchar: declaring inet here did not make Hibernate bind one — it
+    // still sent a String as varchar, which PostgreSQL refuses to coerce, so
+    // every insert failed. V7 converts the column to match this mapping.
+    @Column(name = "ip_address", length = 45)
     private String ipAddress;
 
     @Column(name = "user_agent")

@@ -33,16 +33,54 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody AuthRequest request) {
-        // First validate credentials, then require OTP
+        // Credentials first; the second factor only applies to accounts enrolled in it.
         var authResponse = identityService.login(request);
-        
-        // Generate OTP for login verification
+
+        User user = userRepository.findById(authResponse.getUserId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Authenticated user vanished: " + authResponse.getUserId()));
+
+        // Only accounts with MFA switched on are challenged. Previously every
+        // login returned requiresOtp=true unconditionally, including accounts
+        // with no phone number — generateOtp then failed, its null otpId was
+        // coerced to "", and the caller got HTTP 200 claiming an OTP had been
+        // sent. No code existed to verify, so login could never complete.
+        if (!Boolean.TRUE.equals(user.getMfaEnabled())) {
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "requiresOtp", false,
+                    "accessToken", authResponse.getAccessToken(),
+                    "refreshToken", authResponse.getRefreshToken(),
+                    "user", authResponse
+            ));
+        }
+
         OtpGenerationResult otpResult = otpService.generateOtp(authResponse.getUserId(), OtpPurpose.LOGIN);
-        
+
+        // Fail closed: this account requires a second factor, so a challenge we
+        // could not issue must never fall through to a session. Returning the
+        // failure keeps the misconfiguration visible instead of silently
+        // stranding the user on an OTP prompt that can never be satisfied.
+        if (!otpResult.success() || otpResult.otpId() == null) {
+            return ResponseEntity.status(503).body(Map.of(
+                    "success", false,
+                    "requiresOtp", true,
+                    "error", otpResult.error() != null
+                            ? otpResult.error()
+                            : "Could not send the login code. Contact an administrator."
+            ));
+        }
+
         return ResponseEntity.ok(Map.of(
+                "success", true,
                 "requiresOtp", true,
-                "otpId", otpResult.otpId() != null ? otpResult.otpId().toString() : "",
+                "otpId", otpResult.otpId().toString(),
                 "message", "OTP sent to your registered phone number",
+                // Flattened alongside the nested object: the client reads
+                // userId/fullName at the top level.
+                "userId", authResponse.getUserId().toString(),
+                "email", authResponse.getEmail(),
+                "fullName", authResponse.getFullName(),
                 "user", Map.of(
                         "userId", authResponse.getUserId().toString(),
                         "email", authResponse.getEmail(),
