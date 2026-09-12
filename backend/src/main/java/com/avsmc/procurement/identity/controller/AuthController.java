@@ -35,13 +35,25 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody AuthRequest request) {
         // First validate credentials, then require OTP
         var authResponse = identityService.login(request);
-        
+
         // Generate OTP for login verification
         OtpGenerationResult otpResult = otpService.generateOtp(authResponse.getUserId(), OtpPurpose.LOGIN);
-        
+        if (!otpResult.success()) {
+            // Without a usable OTP path the login can never complete — surface it
+            return ResponseEntity.status(503).body(Map.of(
+                    "error", "OTP_UNAVAILABLE",
+                    "message", otpResult.error() != null ? otpResult.error() : "Cannot send verification code"
+            ));
+        }
+
         return ResponseEntity.ok(Map.of(
                 "requiresOtp", true,
                 "otpId", otpResult.otpId() != null ? otpResult.otpId().toString() : "",
+                // flat fields for clients that read userId/email/fullName at the
+                // top level (the nested "user" map keeps the original shape)
+                "userId", authResponse.getUserId().toString(),
+                "email", authResponse.getEmail(),
+                "fullName", authResponse.getFullName(),
                 "message", "OTP sent to your registered phone number",
                 "user", Map.of(
                         "userId", authResponse.getUserId().toString(),

@@ -41,19 +41,32 @@ req() { # method path token data -> sets STATUS and BODY
 
 section() { echo; echo "══ $1 ══"; }
 
+# Two-step login: password -> OTP challenge -> tokens (test code: 123456).
+# Leaves STATUS/BODY on the final auth response; unwraps .user so downstream
+# field extraction (.accessToken, .orgType, .roleCode, …) keeps working.
+OTP_CODE="${OTP_CODE:-123456}"
+login() { # email password
+  req POST /auth/login "" '{"email":"'"$1"'","password":"'"$2"'"}'
+  if [ "$STATUS" = "200" ] && [ "$(json .requiresOtp "$BODY")" = "true" ]; then
+    local uid; uid=$(json .userId "$BODY")
+    req POST /auth/login/verify "" '{"userId":"'"$uid"'","otpCode":"'"$OTP_CODE"'"}'
+    if [ "$STATUS" = "200" ]; then BODY=$(json .user "$BODY"); fi
+  fi
+}
+
 RUN_TAG=$RANDOM
 echo "AV SMB Procurement OS — use-case suite against $BASE_URL (run $RUN_TAG)"
 
 # ═══════════════════════════ 1. AUTH & IDENTITY ═══════════════════════════
 section "Auth & Identity"
 
-req POST /auth/login "" '{"email":"admin@avmotors.com","password":"'"$ADMIN_PASSWORD"'"}'
+login admin@avmotors.com "$ADMIN_PASSWORD"
 expect "AV admin login" 200 "$STATUS" "${BODY:0:120}"
 AV_TOKEN=$(json .accessToken "$BODY"); AV_REFRESH=$(json .refreshToken "$BODY")
 AV_ORG=$(json .organisationId "$BODY")
 [ "$AV_TOKEN" != "null" ] && [ -n "$AV_TOKEN" ] && ok "access token issued" || fail "access token issued"
 
-req POST /auth/login "" '{"email":"admin@smbprocurement.com","password":"'"$ADMIN_PASSWORD"'"}'
+login admin@smbprocurement.com "$ADMIN_PASSWORD"
 expect "SMB admin login" 200 "$STATUS" "${BODY:0:120}"
 SMB_TOKEN=$(json .accessToken "$BODY"); SMB_REFRESH=$(json .refreshToken "$BODY")
 [ "$(json .orgType "$BODY")" = "SUPPLIER" ] && ok "SMB org type = SUPPLIER" || fail "SMB org type" "$(json .orgType "$BODY")"
@@ -91,11 +104,11 @@ AV_ROLE_ID=$(json '.[] | select(.code=="AV_TECHNICIAN") | .id' "$BODY")
 [ -n "$AV_ROLE_ID" ] && [ "$AV_ROLE_ID" != "null" ] && ok "technician role resolved" || fail "technician role resolved" "${BODY:0:120}"
 
 # Create a low-privilege user and log in as them
-req POST /auth/users "$AV_TOKEN" '{"email":"tech-'"$RUN_TAG"'@avmotors.com","password":"Tech@12345","firstName":"Tec","lastName":"Hnician","roleIds":["'"$AV_ROLE_ID"'"]}'
+req POST /auth/users "$AV_TOKEN" '{"email":"tech-'"$RUN_TAG"'@avmotors.com","password":"Tech@12345","firstName":"Tec","lastName":"Hnician","phone":"+263778000111","roleIds":["'"$AV_ROLE_ID"'"]}'
 CREATE_USER_STATUS="$STATUS"
 if [ "$CREATE_USER_STATUS" = "200" ]; then
   ok "create technician user (role: $(json '.roles[0].code' "$BODY" 2>/dev/null || echo '?'))"
-  req POST /auth/login "" '{"email":"tech-'"$RUN_TAG"'@avmotors.com","password":"Tech@12345"}'
+  login "tech-$RUN_TAG@avmotors.com" "Tech@12345"
   TECH_TOKEN=$(json .accessToken "$BODY")
   [ "$(json .roleCode "$BODY")" != "null" ] && ok "new user can log in as $(json .roleCode "$BODY")" || fail "new user login" "${BODY:0:120}"
   req POST /vehicles "$TECH_TOKEN" '{"registration":"TECH1","make":"Toyota","model":"Hilux"}'
@@ -112,7 +125,7 @@ req POST /auth/users "$AV_TOKEN" '{"email":"weak@avmotors.com","password":"short
 expect "weak password rejected (422)" 422 "$STATUS"
 
 # Account lockout (prod policy: 3 attempts / 30 min) — use a disposable user
-req POST /auth/users "$AV_TOKEN" '{"email":"locked-'"$RUN_TAG"'@avmotors.com","password":"Locked@123","firstName":"Lock","lastName":"Out","roleIds":["'"$AV_ROLE_ID"'"]}'
+req POST /auth/users "$AV_TOKEN" '{"email":"locked-'"$RUN_TAG"'@avmotors.com","password":"Locked@123","firstName":"Lock","lastName":"Out","phone":"+263778000112","roleIds":["'"$AV_ROLE_ID"'"]}'
 req POST /auth/login "" '{"email":"locked-'"$RUN_TAG"'@avmotors.com","password":"bad-pass-1"}' >/dev/null
 req POST /auth/login "" '{"email":"locked-'"$RUN_TAG"'@avmotors.com","password":"bad-pass-2"}' >/dev/null
 req POST /auth/login "" '{"email":"locked-'"$RUN_TAG"'@avmotors.com","password":"bad-pass-3"}' >/dev/null

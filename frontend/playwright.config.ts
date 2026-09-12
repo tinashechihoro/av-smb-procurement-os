@@ -5,7 +5,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Serial workers: each login generates a fresh OTP and invalidates the
+  // previous one, so parallel logins as the same seeded user race each other.
+  workers: 1,
   reporter: 'html',
   use: {
     // E2E_BASE_URL targets an existing deployment (e.g. the Podman stack on
